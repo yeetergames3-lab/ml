@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mercury Labs — Winnipeg</title>
+<meta name="description" content="Mercury Labs is a small lab in Winnipeg, Manitoba, hosting school projects, experiments, and the things we're curious about." />
+<script>document.documentElement.classList.add("js");</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:        #0a0a0c;
+    --bg-soft:   #0e0e12;
+    --surface:   #121218;
+    --surface-2: #16161d;
+    --text:      #ededf0;
+    --muted:     #8b8b95;
+    --faint:     #5e5e68;
+    --line:      rgba(255,255,255,0.08);
+    --line-2:    rgba(255,255,255,0.14);
+    --purple:    #8b5cf6;
+    --purple-2:  #a78bfa;
+
+    --s1: 8px;  --s2: 16px; --s3: 24px; --s4: 40px;
+    --s5: 64px; --s6: 96px; --s7: 128px;
+
+    --container: 1080px;
+    --section-y: clamp(84px, 12vw, 140px);
+    --radius: 14px;
+
+    --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+
+  /* ---------- fixed atmosphere layers ---------- */
+  /* faint symmetric grid */
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size:68px 68px;
+    background-position:center;
+    -webkit-mask-image:radial-gradient(ellipse 85% 75% at 50% 38%, #000 0%, transparent 82%);
+            mask-image:radial-gradient(ellipse 85% 75% at 50% 38%, #000 0%, transparent 82%);
+  }
+  /* animated pixel starfield */
+  #starfield{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+  /* cursor-following purple glow */
+  #spotlight{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:radial-gradient(560px circle at var(--mx,50%) var(--my,30%),
+              rgba(139,92,246,0.10), rgba(139,92,246,0.03) 38%, transparent 62%);
+    transition:opacity .4s ease;
+  }
+  /* film grain over everything */
+  #grain{
+    position:fixed; inset:0; z-index:200; pointer-events:none;
+    opacity:.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  a{ color:inherit; text-decoration:none; }
+
+  .container{
+    width:100%; max-width:var(--container);
+    margin:0 auto; padding:0 var(--s3);
+    position:relative; z-index:1;
+  }
+
+  /* ---------- the pixel star (redrawn per frame, screen-aligned pixels) ---------- */
+  .star{
+    display:block;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+  }
+
+  /* ---------- scroll progress ---------- */
+  #progress{
+    position:fixed; top:0; left:0; height:2px; width:100%;
+    background:linear-gradient(90deg, var(--purple), var(--purple-2));
+    transform:scaleX(0); transform-origin:0 50%; z-index:100;
+  }
+
+  /* ---------- nav ---------- */
+  header{
+    position:fixed; top:0; left:0; right:0; z-index:60;
+    transition:background .35s ease, border-color .35s ease, backdrop-filter .35s ease;
+    border-bottom:1px solid transparent;
+  }
+  header.scrolled{
+    background:rgba(10,10,12,0.7);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{
+    display:grid; grid-template-columns:1fr auto 1fr;
+    align-items:center; height:74px; gap:var(--s4);
+  }
+  .nav-links{ display:flex; }
+  .nav-links.left{ justify-content:flex-end; }
+  .nav-links.right{ justify-content:flex-start; }
+  .nav-links a{
+    font-size:.86rem; color:var(--muted); letter-spacing:.01em;
+    transition:color .2s ease; white-space:nowrap; position:relative;
+  }
+  .nav-links a::after{
+    content:""; position:absolute; left:0; bottom:-6px; height:1px; width:0;
+    background:var(--purple-2); transition:width .25s ease;
+  }
+  .nav-links a:hover{ color:var(--text); }
+  .nav-links a:hover::after{ width:100%; }
+
+  .brand{ display:flex; align-items:center; gap:var(--s2); justify-self:center; }
+  .brand .star{ width:38px; height:38px; }
+  .brand .wordmark{
+    font-family:var(--font-display); font-weight:600; letter-spacing:.16em;
+    font-size:.92rem; text-transform:uppercase; white-space:nowrap;
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    position:relative; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:calc(74px + var(--s6)) 0 var(--s7);
+  }
+  .hero-star-wrap{ position:relative; margin-bottom:var(--s5); will-change:transform; }
+  .hero-star-wrap::before{
+    content:""; position:absolute; inset:-65%;
+    background:radial-gradient(circle, rgba(139,92,246,0.26) 0%, rgba(139,92,246,0.07) 36%, transparent 70%);
+    filter:blur(8px); z-index:-1;
+    animation:breathe 6s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ transform:scale(1); opacity:.85; } 50%{ transform:scale(1.12); opacity:1; } }
+  .hero-star-wrap .star{
+    width:clamp(120px, 21vw, 172px);
+    height:clamp(120px, 21vw, 172px);
+  }
+
+  .eyebrow{
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.28em;
+    text-transform:uppercase; color:var(--purple-2);
+    display:inline-flex; align-items:center; gap:var(--s2);
+  }
+  .eyebrow::before, .eyebrow::after{ content:""; width:22px; height:1px; background:var(--line-2); }
+
+  .hero h1{
+    font-family:var(--font-display); font-weight:600;
+    font-size:clamp(2.7rem, 7vw, 5.1rem); line-height:1.02; letter-spacing:-0.025em;
+    margin:var(--s4) 0 var(--s3);
+    text-shadow:0 0 50px rgba(139,92,246,0.18);
+  }
+  .hero h1 .accent{
+    background:linear-gradient(100deg, var(--text) 35%, var(--purple-2));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .hero .lede{
+    max-width:580px; margin:0 auto; color:var(--muted);
+    font-size:clamp(1rem, 1.6vw, 1.18rem);
+  }
+  .hero .lede strong{ color:var(--text); font-weight:500; }
+
+  .cta-row{ display:flex; gap:var(--s2); justify-content:center; margin-top:var(--s5); flex-wrap:wrap; }
+  .btn{
+    font-family:var(--font-body); font-weight:500; font-size:.92rem;
+    padding:13px 26px; border-radius:10px; border:1px solid transparent;
+    transition:transform .18s ease, box-shadow .25s ease, background .2s ease, border-color .2s ease, color .2s ease;
+    cursor:pointer; position:relative; overflow:hidden;
+  }
+  .btn-primary{ background:var(--purple); color:#0a0a0c; font-weight:600; }
+  .btn-primary:hover{ background:var(--purple-2); transform:translateY(-2px); box-shadow:0 10px 30px -8px rgba(139,92,246,0.6); }
+  .btn-ghost{ border-color:var(--line-2); color:var(--text); background:transparent; }
+  .btn-ghost:hover{ border-color:var(--purple); color:var(--purple-2); transform:translateY(-2px); }
+
+  .scroll-cue{
+    position:absolute; bottom:var(--s4); left:50%; transform:translateX(-50%);
+    font-family:var(--font-mono); font-size:.62rem; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--faint); display:flex; flex-direction:column; align-items:center; gap:var(--s1);
+  }
+  .scroll-cue .line{
+    width:1px; height:34px; background:linear-gradient(var(--line-2), transparent);
+    animation:cue 2.4s ease-in-out infinite; transform-origin:top;
+  }
+  @keyframes cue{ 0%,100%{ transform:scaleY(.4); opacity:.4; } 50%{ transform:scaleY(1); opacity:1; } }
+
+  /* ---------- sections ---------- */
+  section{ padding:var(--section-y) 0; position:relative; }
+
+  .section-head{ text-align:center; max-width:620px; margin:0 auto var(--s6); }
+  .section-head h2{
+    font-family:var(--font-display); font-weight:600;
+    font-size:clamp(1.9rem, 4vw, 2.8rem); letter-spacing:-0.02em; line-height:1.1;
+    margin:var(--s3) 0 var(--s3);
+  }
+  .section-head p{ color:var(--muted); font-size:1.02rem; }
+
+  .divider{
+    width:100%; height:1px; max-width:var(--container); margin:0 auto;
+    background:linear-gradient(90deg, transparent, var(--line-2) 18%, var(--line-2) 82%, transparent);
+    transform:scaleX(0); transition:transform 1.1s cubic-bezier(.2,.7,.2,1);
+  }
+  .divider.in{ transform:scaleX(1); }
+
+  /* ---------- pillars ---------- */
+  .pillars{ display:grid; grid-template-columns:repeat(3, 1fr); gap:var(--s3); }
+  .pillar{
+    position:relative; overflow:hidden; text-align:center;
+    padding:var(--s5) var(--s3);
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    transition:border-color .25s ease, transform .25s ease, background .25s ease;
+  }
+  .pillar::before{
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:0;
+    background:radial-gradient(190px circle at var(--px,50%) var(--py,50%), rgba(139,92,246,0.14), transparent 60%);
+    transition:opacity .3s ease;
+  }
+  .pillar:hover{ border-color:var(--line-2); transform:translateY(-4px); background:var(--surface-2); }
+  .pillar:hover::before{ opacity:1; }
+  .pillar > *{ position:relative; z-index:1; }
+  .pillar .dot{
+    width:9px; height:9px; margin:0 auto var(--s3);
+    background:var(--purple); box-shadow:0 0 18px rgba(139,92,246,0.7); image-rendering:pixelated;
+  }
+  .pillar .tag{
+    font-family:var(--font-mono); font-size:.66rem; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--purple-2);
+  }
+  .pillar h3{
+    font-family:var(--font-display); font-weight:500; font-size:1.3rem;
+    margin:var(--s3) 0 var(--s2); letter-spacing:-0.01em;
+  }
+  .pillar p{ color:var(--muted); font-size:.95rem; }
+
+  /* ---------- contact / footer ---------- */
+  .contact{ text-align:center; }
+  .contact .mailto{
+    display:inline-block; font-family:var(--font-display); font-weight:600;
+    font-size:clamp(1.5rem, 3.5vw, 2.4rem); letter-spacing:-0.02em; margin:var(--s2) 0 var(--s5);
+    background:linear-gradient(90deg, var(--text), var(--purple-2));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    transition:opacity .2s ease;
+  }
+  .contact .mailto:hover{ opacity:.8; }
+  .meta-row{
+    font-family:var(--font-mono); font-size:.74rem; letter-spacing:.12em; color:var(--faint);
+    display:flex; gap:var(--s2); justify-content:center; flex-wrap:wrap;
+  }
+  .meta-row span{ color:var(--muted); }
+
+  footer{ border-top:1px solid var(--line); padding:var(--s5) 0; }
+  .footer-inner{ display:flex; align-items:center; justify-content:center; flex-direction:column; gap:var(--s3); text-align:center; }
+  .footer-inner .star{ width:32px; height:32px; }
+  .footer-inner .copy{
+    font-family:var(--font-mono); font-size:.68rem; letter-spacing:.16em;
+    color:var(--faint); text-transform:uppercase;
+  }
+
+  /* ---------- scroll reveal ---------- */
+  .reveal{
+    opacity:0; transform:translateY(28px);
+    transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1);
+  }
+  .reveal.in{ opacity:1; transform:none; }
+  .pillars .reveal:nth-child(2){ transition-delay:.08s; }
+  .pillars .reveal:nth-child(3){ transition-delay:.16s; }
+
+  /* ---------- hero load sequence ---------- */
+  .js .hero-anim{ opacity:0; transform:translateY(22px); }
+  .js body.loaded .hero-anim{
+    opacity:1; transform:none;
+    transition:opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1);
+  }
+  .hero-anim:nth-child(1){ transition-delay:.05s; }
+  .hero-anim:nth-child(2){ transition-delay:.18s; }
+  .hero-anim:nth-child(3){ transition-delay:.30s; }
+  .hero-anim:nth-child(4){ transition-delay:.42s; }
+  .hero-anim:nth-child(5){ transition-delay:.54s; }
+
+  /* ---------- focus ---------- */
+  a:focus-visible, .btn:focus-visible{ outline:2px solid var(--purple-2); outline-offset:3px; border-radius:6px; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    .nav{ grid-template-columns:1fr; justify-items:center; gap:var(--s2); height:auto; padding:var(--s2) 0; }
+    .nav-links.left{ order:2; } .brand{ order:1; } .nav-links.right{ order:3; }
+    header.scrolled .nav-links{ display:none; }
+    .pillars{ grid-template-columns:1fr; max-width:420px; margin:0 auto; }
+    .hero{ padding-top:calc(120px + var(--s4)); }
+  }
+  @media (max-width:520px){
+    .nav-links a{ font-size:.82rem; }
+    .meta-row{ flex-direction:column; gap:4px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior:auto; }
+    .scroll-cue .line, .hero-star-wrap::before{ animation:none; }
+    .reveal, .divider{ opacity:1; transform:none; transition:none; }
+    .js .hero-anim{ opacity:1; transform:none; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="starfield" aria-hidden="true"></canvas>
+  <div id="spotlight" aria-hidden="true"></div>
+  <div id="progress" aria-hidden="true"></div>
+
+  <header id="site-header">
+    <div class="container">
+      <nav class="nav">
+        <div class="nav-links left"><a href="#what">What we do</a></div>
+        <a class="brand" href="#top" aria-label="Mercury Labs home">
+          <canvas class="star" data-size="30" data-speed="1.4" aria-hidden="true"></canvas>
+          <span class="wordmark">Mercury&nbsp;Labs</span>
+        </a>
+        <div class="nav-links right"><a href="#contact">Contact</a></div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-star-wrap hero-anim" id="hero-star">
+          <canvas class="star" data-size="40" data-speed="1" aria-hidden="true"></canvas>
+        </div>
+        <p class="eyebrow hero-anim">Winnipeg, Manitoba</p>
+        <h1 class="hero-anim">Mercury <span class="accent">Labs</span></h1>
+        <p class="lede hero-anim">A small lab building, breaking, and hosting the things we're curious about. <strong>School projects, experiments, and whatever else holds our attention</strong> — kept in one place.</p>
+        <div class="cta-row hero-anim">
+          <a class="btn btn-primary" href="#what">What we do</a>
+          <a class="btn btn-ghost" href="#contact">Say hello</a>
+        </div>
+      </div>
+      <div class="scroll-cue" aria-hidden="true">
+        <span>Scroll</span>
+        <span class="line"></span>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- WHAT WE DO -->
+    <section id="what">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">What we do</p>
+          <h2>One place for the things we make.</h2>
+          <p>Mercury Labs is where our coursework, side experiments, and curiosities live. Some of it is assigned, most of it isn't. We host it, document it, and keep it running.</p>
+        </div>
+        <div class="pillars">
+          <div class="pillar reveal">
+            <div class="dot" aria-hidden="true"></div>
+            <p class="tag">Coursework</p>
+            <h3>School projects</h3>
+            <p>Assignments and term projects we decided were worth keeping online.</p>
+          </div>
+          <div class="pillar reveal">
+            <div class="dot" aria-hidden="true"></div>
+            <p class="tag">Experiments</p>
+            <h3>Things we're testing</h3>
+            <p>Prototypes and half-built ideas we use to learn something new.</p>
+          </div>
+          <div class="pillar reveal">
+            <div class="dot" aria-hidden="true"></div>
+            <p class="tag">Curiosity</p>
+            <h3>Stuff we find interesting</h3>
+            <p>The tangents — tools, write-ups, and oddities that caught our attention.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- CONTACT -->
+    <section id="contact">
+      <div class="container">
+        <div class="contact reveal">
+          <p class="eyebrow">Contact</p>
+          <a class="mailto" href="mailto:hello@mercurylab.ca">hello@mercurylab.ca</a>
+          <div class="meta-row">
+            <span>mercurylab.ca</span> ·
+            <span>Winnipeg, Manitoba</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <canvas class="star" data-size="30" data-speed="1" aria-hidden="true"></canvas>
+        <p class="copy">© 2026 Mercury Labs · Winnipeg</p>
+      </div>
+    </div>
+  </footer>
+
+  <div id="grain" aria-hidden="true"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ============ pixel star: rotate the geometry, redraw every frame ============ */
+  var starCanvases = [];
+  (function setupStars(){
+    var nodes = document.querySelectorAll("canvas.star");
+    for (var i = 0; i < nodes.length; i++){
+      var c = nodes[i];
+      var size = parseInt(c.getAttribute("data-size"), 10) || 36;
+      c.width = size;          // low internal res -> upscaled with nearest-neighbour
+      c.height = size;
+      c._size = size;
+      c._ctx = c.getContext("2d");
+      c._speed = parseFloat(c.getAttribute("data-speed")) || 1;
+      starCanvases.push(c);
+    }
+  })();
+
+  function drawStar(c, angle){
+    var size = c._size, ctx = c._ctx;
+    var cx = size / 2, cy = size / 2;
+    var spikes = 5, outerR = size * 0.44, innerR = outerR * 0.40;
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    var rot = -Math.PI / 2, step = Math.PI / spikes;
+    for (var i = 0; i < spikes; i++){
+      ctx.lineTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+      rot += step;
+      ctx.lineTo(Math.cos(rot) * innerR, Math.sin(rot) * innerR);
+      rot += step;
+    }
+    ctx.closePath();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(2, size * 0.085);
+    ctx.strokeStyle = "#ededf0";
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ============ starfield ============ */
+  var sf = document.getElementById("starfield");
+  var sctx = sf.getContext("2d");
+  var dots = [], dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 0, H = 0;
+
+  function sizeStarfield(){
+    W = window.innerWidth; H = window.innerHeight;
+    sf.width = Math.floor(W * dpr); sf.height = Math.floor(H * dpr);
+    sf.style.width = W + "px"; sf.style.height = H + "px";
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var count = Math.max(40, Math.min(170, Math.floor(W * H / 11000)));
+    dots = [];
+    for (var i = 0; i < count; i++){
+      dots.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        s: Math.random() < 0.84 ? 1 : 2,
+        z: Math.random() * 0.8 + 0.2,
+        vy: Math.random() * 0.14 + 0.04,
+        tw: Math.random() * Math.PI * 2,
+        purple: Math.random() < 0.12
+      });
+    }
+  }
+
+  var mx = 0.5, my = 0.4, tmx = 0.5, tmy = 0.4;
+
+  function drawStarfield(t){
+    sctx.clearRect(0, 0, W, H);
+    var ox = (mx - 0.5), oy = (my - 0.4);
+    for (var i = 0; i < dots.length; i++){
+      var d = dots[i];
+      if (!reduce){
+        d.y -= d.vy * d.z;
+        if (d.y < -2){ d.y = H + 2; d.x = Math.random() * W; }
+      }
+      var px = d.x + ox * d.z * 34;
+      var py = d.y + oy * d.z * 34;
+      var twinkle = reduce ? 1 : (0.55 + 0.45 * Math.sin(t * 0.0015 + d.tw));
+      var base = (d.purple ? 0.85 : 0.6) * d.z;
+      sctx.globalAlpha = Math.max(0, Math.min(1, base * twinkle));
+      sctx.fillStyle = d.purple ? "#a78bfa" : "#ededf0";
+      sctx.fillRect(Math.floor(px), Math.floor(py), d.s, d.s);
+    }
+    sctx.globalAlpha = 1;
+  }
+
+  /* ============ scroll: progress, nav, parallax, spin boost ============ */
+  var progress = document.getElementById("progress");
+  var header = document.getElementById("site-header");
+  var heroStar = document.getElementById("hero-star");
+  var lastY = window.pageYOffset || 0;
+  var spinBoost = 0;
+
+  function onScroll(){
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var y = window.pageYOffset || doc.scrollTop;
+    progress.style.transform = "scaleX(" + (max > 0 ? y / max : 0) + ")";
+    if (y > 40){ header.classList.add("scrolled"); } else { header.classList.remove("scrolled"); }
+
+    if (!reduce){
+      spinBoost += Math.min(Math.abs(y - lastY) * 0.0007, 0.06);
+      if (heroStar && y < window.innerHeight){
+        var p = Math.min(y / window.innerHeight, 1);
+        heroStar.style.transform = "translateY(" + (y * 0.18) + "px) scale(" + (1 - p * 0.12) + ")";
+        heroStar.style.opacity = String(1 - Math.min(y / (window.innerHeight * 0.9), 1) * 0.7);
+      }
+    }
+    lastY = y;
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  /* ============ pointer: spotlight + starfield parallax + card highlight ============ */
+  window.addEventListener("pointermove", function(e){
+    tmx = e.clientX / window.innerWidth;
+    tmy = e.clientY / window.innerHeight;
+    document.documentElement.style.setProperty("--mx", (tmx * 100) + "%");
+    document.documentElement.style.setProperty("--my", (tmy * 100) + "%");
+  }, { passive: true });
+
+  var pillars = document.querySelectorAll(".pillar");
+  for (var p = 0; p < pillars.length; p++){
+    (function(el){
+      el.addEventListener("pointermove", function(e){
+        var r = el.getBoundingClientRect();
+        el.style.setProperty("--px", ((e.clientX - r.left) / r.width * 100) + "%");
+        el.style.setProperty("--py", ((e.clientY - r.top) / r.height * 100) + "%");
+      });
+    })(pillars[p]);
+  }
+
+  /* ============ reveal + divider draw-in ============ */
+  var observed = document.querySelectorAll(".reveal, .divider");
+  if ("IntersectionObserver" in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.15, rootMargin: "0px 0px -8% 0px" });
+    for (var r2 = 0; r2 < observed.length; r2++){ io.observe(observed[r2]); }
+  } else {
+    for (var n = 0; n < observed.length; n++){ observed[n].classList.add("in"); }
+  }
+
+  /* ============ main loop ============ */
+  var angle = 0, baseSpeed = 0.006;
+  function frame(t){
+    // ease pointer for starfield
+    mx += (tmx - mx) * 0.05; my += (tmy - my) * 0.05;
+    angle += baseSpeed + spinBoost;
+    spinBoost *= 0.9;
+    for (var i = 0; i < starCanvases.length; i++){
+      drawStar(starCanvases[i], angle * starCanvases[i]._speed);
+    }
+    drawStarfield(t);
+    requestAnimationFrame(frame);
+  }
+
+  function init(){
+    sizeStarfield();
+    onScroll();
+    if (reduce){
+      for (var i = 0; i < starCanvases.length; i++){ drawStar(starCanvases[i], -Math.PI / 10); }
+      drawStarfield(0);
+    } else {
+      requestAnimationFrame(frame);
+    }
+  }
+
+  var rt;
+  window.addEventListener("resize", function(){ clearTimeout(rt); rt = setTimeout(sizeStarfield, 150); }, { passive: true });
+
+  init();
+
+  // hero load-in
+  var didLoad = false;
+  function loaded(){
+    if (didLoad) return;
+    didLoad = true;
+    document.body.classList.add("loaded");
+    // once the entrance finishes, drop transitions so scroll parallax stays instant
+    setTimeout(function(){ if (heroStar) heroStar.style.transition = "none"; }, 1500);
+  }
+  if (document.readyState === "complete"){ loaded(); }
+  else { window.addEventListener("load", loaded); setTimeout(loaded, 800); }
+})();
+</script>
+</body>
+</html>
