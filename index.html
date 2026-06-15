@@ -77,6 +77,40 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
+  /* ---------- pixel cursor (pixelates the more you scroll) ---------- */
+  #cursor{
+    position:fixed; top:0; left:0; z-index:300; pointer-events:none;
+    width:30px; height:30px;
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    opacity:0; transition:opacity .25s ease;
+    will-change:transform;
+  }
+  #cursor.show{ opacity:1; }
+  /* hide the OS cursor only when the pixel cursor is active */
+  body.pixel-cursor,
+  body.pixel-cursor a,
+  body.pixel-cursor .btn,
+  body.pixel-cursor *{ cursor:none; }
+
+  /* ---------- custom scrollbar ---------- */
+  html{ scrollbar-width:thin; scrollbar-color:var(--purple) transparent; }
+  ::-webkit-scrollbar{ width:12px; height:12px; }
+  ::-webkit-scrollbar-track{
+    background:rgba(255,255,255,0.025);
+    border-left:1px solid var(--line);
+  }
+  ::-webkit-scrollbar-thumb{
+    background:linear-gradient(180deg, var(--purple), var(--purple-2));
+    background-clip:content-box;
+    border:3px solid transparent;     /* inset so the thumb reads as a slim pill */
+    border-radius:999px;
+  }
+  ::-webkit-scrollbar-thumb:hover{
+    background:linear-gradient(180deg, var(--purple-2), var(--purple));
+    background-clip:content-box;
+  }
+  ::-webkit-scrollbar-corner{ background:transparent; }
+
   a{ color:inherit; text-decoration:none; }
 
   .container{
@@ -416,6 +450,7 @@
   </footer>
 
   <div id="grain" aria-hidden="true"></div>
+  <canvas id="cursor" aria-hidden="true"></canvas>
 
 <script>
 (function(){
@@ -511,6 +546,116 @@
     sctx.globalAlpha = 1;
   }
 
+  /* ============ pixel cursor: faster you move / scroll, more pixelated ============ */
+  // A custom arrow cursor is drawn into a tiny buffer whose resolution shrinks
+  // with "energy" — how fast you're moving the mouse and how fast you're
+  // scrolling — then upscaled with nearest-neighbour so it breaks into blocks.
+  // Energy decays every frame, so the cursor crisps back up when you slow down.
+  var finePointer = window.matchMedia("(pointer: fine)").matches;
+  var cursorEl, cctx, cbuf, cbufCtx, arrowMaster;
+  var CUR_DISPLAY = 30;        // on-screen size (matches the CSS width/height)
+  var CUR_MAX_BLOCKS = 30;     // resolution when calm (crisp)
+  var CUR_MIN_BLOCKS = 5;      // resolution at full speed (very chunky)
+  var cursorBlocks = CUR_MAX_BLOCKS, lastBlocks = -1;
+  var curTipX = CUR_DISPLAY * 0.08, curTipY = CUR_DISPLAY * 0.06; // arrow hotspot
+
+  // velocity state
+  var cursorEnergy = 0;                 // 0 = crisp, 1 = max pixelation
+  var SPEED_REF = 2.6;                  // px/ms that counts as "full speed"
+  var ENERGY_DECAY = 0.9;               // per-frame falloff
+  var lastMoveT = 0, lastPX = 0, lastPY = 0, haveMovePt = false;
+  var lastSpeedT = 0, lastSpeedY = 0,  haveSpeedPt = false;
+
+  function pushEnergy(norm){
+    if (norm > cursorEnergy) cursorEnergy = norm > 1 ? 1 : norm;
+  }
+
+  function buildArrowMaster(){
+    // one clean, high-res master arrow we repeatedly downsample from
+    var R = 120;
+    arrowMaster = document.createElement("canvas");
+    arrowMaster.width = R; arrowMaster.height = R;
+    var a = arrowMaster.getContext("2d");
+    var pts = [[0.08,0.06],[0.08,0.74],[0.24,0.60],[0.36,0.88],
+               [0.50,0.82],[0.38,0.55],[0.60,0.55]];
+    a.beginPath();
+    a.moveTo(pts[0][0]*R, pts[0][1]*R);
+    for (var i = 1; i < pts.length; i++){ a.lineTo(pts[i][0]*R, pts[i][1]*R); }
+    a.closePath();
+    a.lineJoin = "round"; a.lineCap = "round";
+    a.lineWidth = R * 0.055;
+    a.strokeStyle = "rgba(10,10,12,0.92)";   // dark rim against the dark theme
+    a.stroke();
+    a.fillStyle = "#ededf0";                 // same off-white as the stars
+    a.fill();
+  }
+
+  function setupCursor(){
+    if (!finePointer) return;                // skip on touch / coarse pointers
+    cursorEl = document.getElementById("cursor");
+    if (!cursorEl) return;
+    cctx = cursorEl.getContext("2d");
+    cursorEl.width  = Math.round(CUR_DISPLAY * dpr);
+    cursorEl.height = Math.round(CUR_DISPLAY * dpr);
+    cbuf = document.createElement("canvas");
+    cbuf.width = CUR_MAX_BLOCKS; cbuf.height = CUR_MAX_BLOCKS;
+    cbufCtx = cbuf.getContext("2d");
+    buildArrowMaster();
+    document.body.classList.add("pixel-cursor");
+    drawCursor();
+  }
+
+  function drawCursor(){
+    if (!cctx) return;
+    var n = Math.max(2, Math.round(cursorBlocks));
+    // 1) downscale the master arrow into an n x n block grid (smooth)
+    cbufCtx.clearRect(0, 0, cbuf.width, cbuf.height);
+    cbufCtx.imageSmoothingEnabled = true;
+    cbufCtx.drawImage(arrowMaster, 0, 0, arrowMaster.width, arrowMaster.height, 0, 0, n, n);
+    // 2) upscale those blocks to full display size (no smoothing = pixelated)
+    cctx.clearRect(0, 0, cursorEl.width, cursorEl.height);
+    cctx.imageSmoothingEnabled = false;
+    cctx.drawImage(cbuf, 0, 0, n, n, 0, 0, cursorEl.width, cursorEl.height);
+  }
+
+  function moveCursor(x, y){
+    if (!cursorEl) return;
+    cursorEl.style.transform = "translate(" + (x - curTipX) + "px," + (y - curTipY) + "px)";
+    if (!cursorEl.classList.contains("show")) cursorEl.classList.add("show");
+
+    // mouse speed -> energy
+    if (reduce) return;
+    var t = performance.now();
+    if (haveMovePt){
+      var dt = t - lastMoveT;
+      if (dt > 0){
+        var dist = Math.hypot(x - lastPX, y - lastPY);
+        pushEnergy((dist / dt) / SPEED_REF);   // px/ms normalised
+      }
+    }
+    lastMoveT = t; lastPX = x; lastPY = y; haveMovePt = true;
+  }
+
+  // scroll speed -> energy (called from onScroll)
+  function feedScrollSpeed(y){
+    if (reduce || !cctx) return;
+    var t = performance.now();
+    if (haveSpeedPt){
+      var dt = t - lastSpeedT;
+      if (dt > 0) pushEnergy((Math.abs(y - lastSpeedY) / dt) / SPEED_REF);
+    }
+    lastSpeedT = t; lastSpeedY = y; haveSpeedPt = true;
+  }
+
+  // run every frame: decay energy, repixelate if the block count changed
+  function stepCursor(){
+    if (!cctx || reduce) return;
+    cursorEnergy *= ENERGY_DECAY;
+    if (cursorEnergy < 0.003) cursorEnergy = 0;
+    var n = Math.round(CUR_MAX_BLOCKS + (CUR_MIN_BLOCKS - CUR_MAX_BLOCKS) * cursorEnergy);
+    if (n !== lastBlocks){ lastBlocks = n; cursorBlocks = n; drawCursor(); }
+  }
+
   /* ============ scroll: progress, nav, parallax, spin boost ============ */
   var progress = document.getElementById("progress");
   var header = document.getElementById("site-header");
@@ -523,6 +668,7 @@
     var max = doc.scrollHeight - doc.clientHeight;
     var y = window.pageYOffset || doc.scrollTop;
     progress.style.transform = "scaleX(" + (max > 0 ? y / max : 0) + ")";
+    feedScrollSpeed(y);
     if (y > 40){ header.classList.add("scrolled"); } else { header.classList.remove("scrolled"); }
 
     if (!reduce){
@@ -543,7 +689,11 @@
     tmy = e.clientY / window.innerHeight;
     document.documentElement.style.setProperty("--mx", (tmx * 100) + "%");
     document.documentElement.style.setProperty("--my", (tmy * 100) + "%");
+    moveCursor(e.clientX, e.clientY);
   }, { passive: true });
+
+  document.addEventListener("mouseleave", function(){ if (cursorEl) cursorEl.classList.remove("show"); });
+  document.addEventListener("mouseenter", function(){ if (cursorEl) cursorEl.classList.add("show"); });
 
   var pillars = document.querySelectorAll(".pillar");
   for (var p = 0; p < pillars.length; p++){
@@ -580,11 +730,13 @@
       drawStar(starCanvases[i], angle * starCanvases[i]._speed);
     }
     drawStarfield(t);
+    stepCursor();
     requestAnimationFrame(frame);
   }
 
   function init(){
     sizeStarfield();
+    setupCursor();
     onScroll();
     if (reduce){
       for (var i = 0; i < starCanvases.length; i++){ drawStar(starCanvases[i], -Math.PI / 10); }
